@@ -1,1 +1,1 @@
-# dynamodb-tutorial
+# DynamoDB
