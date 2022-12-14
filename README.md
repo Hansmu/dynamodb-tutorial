@@ -280,6 +280,14 @@ This will cause our table to perform at a far lower throughput than desired.
 The only way to get rid of extra partitions is to re-create the table.
 
 ### DynamoDB Indexes
+
+It is good to have a string as a partition key, but not required. Also, it's
+good to have a number as a sort key, but again, not required.
+
+Since local secondary indexes can only be defined on create time, then it's
+good to spend a considerable amount of time thinking about what use cases 
+would be required.
+
 #### Primary key
 Each item in a table is uniquely identified by a primary key.
 The primary key definition must be defined at the creation of the table, and
@@ -344,3 +352,20 @@ consistent reads with global secondary indexes. When an item is written to the t
 updated async in the background.
 
 There is no uniqueness constraint with the global secondary index.
+
+### Interacting with DynamoDB
+#### AWS Management Console
+This is the GUI for managing your data.
+#### AWS CLI
+The command line interface. Run `aws configure` first to set up your CLI.
+#### AWS SDK
+The `DocumentClient` class provides higher level access. Abstracts more away.
+Easier to use for item level operations. Maps to appropriate data types.
+
+When inserting items with the same ID, then the previous one will get replaced.
+
+When doing a conditional write, and it fails, then a WCU is still consumed.
+
+Atomic counters are counters that increment/decrement atomically. Atomic means 
+that it's independent of other similar operations. All requests are applied in order.
+Not suitable for applications demanding high degree of accuracy.
