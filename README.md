@@ -369,3 +369,11 @@ When doing a conditional write, and it fails, then a WCU is still consumed.
 Atomic counters are counters that increment/decrement atomically. Atomic means 
 that it's independent of other similar operations. All requests are applied in order.
 Not suitable for applications demanding high degree of accuracy.
+
+When running a query, you are doing a direct lookup to a selected partition based on
+primary or secondary partition/hash key.
+
+Scan scans through the whole table looking for elements matching the criteria.
+
+Query usually returns the results within a 100ms, whereas scan might even take a few
+hours to find the relevant data.

@@ -1,3 +1,10 @@
-import {batchWrite, deleteItem, insertItem} from "./item-operations";
+import {getSingleItem, paginatedRead} from "./read-operations";
 
-// batchWrite();
+// const wrapper = async () => {
+//     const lastEvaluatedKey = await paginatedRead(undefined);
+//     console.log('The lastEvaluatedKey', lastEvaluatedKey);
+//     const newLastEvaluatedKey = await paginatedRead(lastEvaluatedKey as any);
+//     console.log('The next lastEvaluatedKey', newLastEvaluatedKey);
+// };
+//
+// wrapper();
