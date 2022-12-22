@@ -377,3 +377,37 @@ Scan scans through the whole table looking for elements matching the criteria.
 
 Query usually returns the results within a 100ms, whereas scan might even take a few
 hours to find the relevant data.
+
+
+## DynamoDB Architecture
+DynamoDB utilizes a service oriented architecture. This means that software components,
+which are called services, are provided to other services through a communication
+protocol over the network. Basically think of REST.
+
+Just like other AWS services, DynamoDB ensures a predefined and predictable level
+of performance at all times.
+
+Data transfer in DynamoDB happens through simple APIs like the GET, PUT, DELETE.
+
+Data is stored on SSDs. Each partition in DynamoDB provides about 10 GB data and is
+optimized to deliver predictable throughput. 3000 RCUs and 1000 WCUs. In addition,
+DynamoDB stores at least 3 copies of your data in different facilities within the
+region.
+
+DynamoDB uses consistent hashing for scaling up and down.
+
+A table's throughput is divided between its partitions. The number of partitions is
+decided upon by considering the required throughput and/or size. 
+
+Let's say that only size increases, and it causes the need for extra partitions. 
+If you do not scale up your throughput, then you'll suffer in performance, as the 
+throughput is divided between the partitions.
+
+Another situation, let's say that you want to migrate an SQL table to Dynamo. To
+speed up the process, you increase the WCUs to a large amount. This allocates a 
+certain number of partitions. After you're done, you deallocate to a smaller load,
+as you don't need that much WCUs anymore. However, the number of partitions stays
+the same and your throughput gets divided between all of those partitions, causing
+terrible performance.
+
+**DynamoDB DOES NOT deallocate a partition once it has been provisioned!**
