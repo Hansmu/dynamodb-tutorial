@@ -57,7 +57,7 @@ or primary keys to look up any data stored.
 
 ### Types of NoSQL DBs
 * **Columnar DBs** - column orientated. Optimized for reading and writing
-columns of data as opposed to rows of data. Great for things like data
+columns of data as opposed to rows of data (relational DB). Great for things like data
 warehousing and analytics. Reduces the overall disc I/O requirements and
 the amount of data that needs to be loaded from the disc. Some examples are
 Apache Casandra, Apache HBase, Amazon Redshift.
@@ -390,11 +390,11 @@ of performance at all times.
 Data transfer in DynamoDB happens through simple APIs like the GET, PUT, DELETE.
 
 Data is stored on SSDs. Each partition in DynamoDB provides about 10 GB data and is
-optimized to deliver predictable throughput. 3000 RCUs and 1000 WCUs. In addition,
+optimized to deliver predictable throughput. Offers a per partition maximum of 3000 RCUs and 1000 WCUs. In addition,
 DynamoDB stores at least 3 copies of your data in different facilities within the
 region.
 
-DynamoDB uses consistent hashing for scaling up and down.
+DynamoDB uses consistent hashing for distributing its data among nodes.
 
 A table's throughput is divided between its partitions. The number of partitions is
 decided upon by considering the required throughput and/or size. 
@@ -411,3 +411,55 @@ the same and your throughput gets divided between all of those partitions, causi
 terrible performance.
 
 **DynamoDB DOES NOT deallocate a partition once it has been provisioned!**
+
+## Efficient Key Design
+* Simple keys - just a partition key. Partition key has to be unique in a table.
+* Composite keys - partition key + sort key. Combination has to be unique in a table.
+
+The sort keys do not influence the partition choice that Dynamo makes.
+
+Consider data distribution:
+* Ensure uniform distribution of data across partitions
+* Use as many unique values for partition key as possible
+
+Consider read/write patterns:
+* RCUs and WCUs get equally distributed between the partitions
+* Prevent hot partitions
+* Ensure uniform utilization of RCUs and WCUs
+
+Consider time series data:
+* Segregate hot and cold data in to separate tables
+
+Consider scan operations and filters:
+* Always prefer query operations
+* Choose sort keys and indexes to avoid scan operations and filters
+
+|                 | Local secondary indexes                                | Global secondary indexes                                            |
+|-----------------|--------------------------------------------------------|---------------------------------------------------------------------|
+| Key             | Same partition key as the table index                  | Different partition key than the table index                        |
+| Throughput      | Uses table throughput (capacity units)                 | Uses its own throughput (capacity units)                            |
+| Nr allowed      | 5                                                      | 5                                                                   |
+| When to choose? | When application needs same partition key as the table | When application needs different or same partition key as the table |
+|                 | When you need to avoid additional costs                | When application needs finer throughput control                     |
+|                 | When application needs strongly consistent index reads | When application only needs eventually consistent index reads       |
+
+Consider item size:
+* Max size per item - 400 KB
+* Prefer shorter (yet intuitive) attribute names over long and descriptive ones
+
+Consider index attribute size for string and binary data types:
+* Max size of simple partition key = 2 KB
+* Max size of composite partition key = 1 KB
+* Max size of sort key = 1 KB
+
+Summary:
+* Partition key should have many unique values
+* Uniform distribution of read/write operations across partitions
+* Store hot and cold data in separate tables
+* Consider all possible query patterns to eliminate use of scan operations and filters
+* Choose sort key depending on your application's needs
+* Use indexes when your application requires multiple query patterns
+* Use primary key or local secondary indexes when strong consistency is desired
+* Use global secondary index for finer control over throughput or when your application
+needs to query using a different partition key
+* Use shorter attribute names
