@@ -463,3 +463,22 @@ Summary:
 * Use global secondary index for finer control over throughput or when your application
 needs to query using a different partition key
 * Use shorter attribute names
+
+
+## Hot keys or hot partitions
+There are two main ways how hot partitions happen - time series data and popular
+datasets.
+
+Time series data would cause it by having some time related partition key attached to it.
+The recent data would be used more frequently. Could solve this by having different
+tables for each year, and the month still being the partition key. 
+Could also use DAX to cache the hot partition.
+![Hot time series data](./images/hot_time_series_data.png)
+
+An example of popular datasets would be singing contestants. There are clear favourites
+that develop over the course of the competition, but we do not know beforehand. We
+could use write sharding there, where we split the partition key into separate sub IDs.
+When we're writing, we'd choose one ID at random. When we're reading data back, then
+we use shard aggregation. Since we know the range of sub IDs, then we can use a 
+batch GET item and pass all the sub IDs.
+![Hot popular datasets](./images/hot_popular_datasets.png)
