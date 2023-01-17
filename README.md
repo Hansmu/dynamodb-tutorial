@@ -98,6 +98,20 @@ region replication.
 
 ![Terminology comparison](./images/terminology_comparison.png)
 
+A table in DynamoDB is a grouping of records that conceptually belong together.
+In a relational DB a table contains one entity, in DynamoDB it contains all the entities.
+This helps to avoid the join operation, which is expensive as a DB scales.
+
+A relational DB has a specified schema, that describes and enforces the shape of each
+record in the table. At the DB level, DynamoDB is schemaless. You have to enforce a
+schema in your application code.
+
+An item is a single record in a DynamoDB table. Same as a row in a relational DB.
+
+A dynamoDB item is made up of attributes, which are typed data values holding info
+about the element. Attributes are similar to column values on relational records, except
+not required.
+
 ### DynamoDB Tables
 Tables are the top level entities in DynamoDB and all the tables within
 the given AWS region can be looked at as a single DB.
@@ -118,6 +132,20 @@ are totally separate from each other. Each table is an independent entity.
 
 Different table items can have different attributes. The only common attribute
 that must be present in each item in the table is the primary key.
+
+A primary key must be declared for a table on creation. Can be simple (a single value)
+or composite (two values). Primary key selection and design is the most important
+part of data modeling with DynamoDB. Almost all of your data access will be driven 
+off primary keys.
+
+The way you configure your primary key may allow for one read or write access pattern,
+but may prevent you from handling a second access pattern. Secondary indexes allow you
+to reshape your data into another format for querying, so you can add additional access
+patterns to your data. When you create a secondary index on your table, you specify
+the primary keys for your secondary index, just like when you're creating a table. AWS
+will copy all items from your main table into the secondary index in the reshaped form.
+You can then make queries against the secondary index.
+
 
 ### DynamoDB Data Types
 Scalar types
@@ -324,7 +352,17 @@ Operations such as these, in most cases, indicate insufficient data modeling.
 
 
 ### Secondary Indexes
+When creating a secondary index, you will need to specify the key schema of your index.
+The key schema is similar to the primary key of your table - you will state the partition
+and sort key (if desired) for your secondary index that will drive your access patterns.
+
 #### Local secondary index
+A local secondary index uses the same partition key as your table's primary key, but
+a different sort key. This can be a nice fit when you are often filtering your data
+by the same top-level property, but have access patterns to filter your dataset
+further. The partition key can act as the top-level property, and the different sort
+key arrangements will act as your more granular filters.
+
 Local secondary indexes must be created when you create your table.
 You cannot add a local secondary index later on. You can create up to
 5 such local secondary indexes.
@@ -335,7 +373,9 @@ using these local secondary indexes.
 
 #### Global secondary index
 If you'd want to get information that isn't related to the primary
-partition key, then this could be used. For example, in the table, we'd
+partition key, then this could be used. You can choose any attributes you want
+for your partition key and your sort key. Global secondary indexes are used much
+more frequently with DynamoDB due to their flexibility. For example, in the table, we'd
 want to get all the employees working in NYC and sorted by their date of
 joining.
 
@@ -348,12 +388,217 @@ these can be created at any time.
 Global secondary indexes are stored separately in their own partitions.
 They have their own throughput capacity as well, so their RCUs and WCUs
 are not shared with the base table. You can only perform eventually
-consistent reads with global secondary indexes. When an item is written to the table, the global secondary index is 
-updated async in the background.
+consistent reads with global secondary indexes. Data is replicated from the core table
+to global secondary indexes in an async manner. This means it's possible that the data
+returned in your global secondary index does not reflect the latest writes in your main
+table. The delay in replication from the main table to the global secondary indexes 
+is not large, but it may be something you need to account for in your application.
 
 There is no uniqueness constraint with the global secondary index.
 
+|                        | Key schema                                                  | Creation time                         | Consistency                                                                                                            |
+|------------------------|-------------------------------------------------------------|---------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| Local secondary index  | Must use same partition key as the base table               | Must be created when table is created | Eventual consistency by default. Can choose to receive strongly-consistent reads at a cost of higher throughput usage. |
+| Global secondary index | May use any attribute from table as partition and sort keys | Can be created after the table exists | Eventual consistency only.                                                                                             |
+
+### DynamoDB Streams
+Streams are an immutable sequence of records that can be processed by multiple,
+independent consumers.
+
+![Generic stream example](./images/stream_generic.png)
+
+With DynamoDB streams, you can create a stream of data that includes a record of 
+each change to an item in your table. Whenever an item is written, updated, or 
+deleted, a record containing the details of that record will be written to your
+DynamoDB stream. You can then process this stream with AWS Lambda or other compute 
+infrastructure.
+
+![DynamoDB Stream example](./images/dynamo_stream.png)
+
+### Time-to-live
+TTLs allow you to have DynamoDB automatically delete items on a per-item basis. 
+This is a great option for storing short-term data in DynamoDB as you can use
+TTL to clean up your database rather than handling it manually via a scheduled job.
+
+To use TTL, you specify an attribute on your DynamoDB table that will serve as the 
+marker for item deletion. For each item that you want to expire, you should store a 
+Unix timestamp as a number in your specified attribute. This timestamp should state 
+the time after which the item should be deleted. DynamoDB will periodically review 
+your table and delete items that have your TTL attribute set to a time before the 
+current time.
+
+For items that you don’t want to automatically expire, you can simply not set the 
+TTL attribute on the item.
+
+Items are generally deleted in a timely manner, but AWS only states that items 
+will usually be deleted within 48 hours after the time indicated by the attribute.
+
+### Partition
+Partitions are the core storage units underlying your DynamoDB table. Dynamo shards 
+your data across multiple server instances.
+
+When a request comes into DynamoDB, the request router looks at
+the partition key in the request and applies a hash function to it.
+The result of that hash function indicates the server where that data
+will be stored, and the request is forwarded to that server to read or
+write the data as requested.
+
+In earlier versions of DynamoDB, you needed to be more aware of
+partitions. Previously, the total throughput on a table was shared
+evenly across all partitions. You could run into issues when
+unbalanced access meant you were getting throttled without using
+your full throughput. You could also run into an issue called
+throughput dilution if you temporarily scaled the throughput very
+high on your table, such as if you were running a bulk import job,
+then scaled the throughput back down.
+
+All of this is less of a concern now as the DynamoDB team has
+added a concept called adaptive capacity. With adaptive capacity,
+throughput is automatically spread around your table to the items
+that need it. There’s no more uneven throughput distribution and
+no more throughput dilution.
+
+### Consistency
+At a general level, consistency refers to whether a particular read operation 
+receives all write operations that have occurred prior to the read.
+
+When you write data to DynamoDB, there is a request router that is the frontend for 
+all requests. It will authenticate your request to ensure you have access to write 
+to the table. If so, it will hash the partition key of your item and send that key 
+to the proper primary node for that item.
+
+The primary node for a partition holds the canonical, correct data for the items 
+in that node. When a write request comes in, the primary node will commit the write 
+and commit the write to one of two secondary nodes for the partition. This ensures 
+the write is saved in the event of a loss of a single node.
+
+After the primary node responds to the client to indicate that the write was 
+successful, it then asynchronously replicates the write to a third storage node.
+
+The secondary nodes provide fault-tolerance, and distributed load for read requests.
+The reads, however, can be eventually consistent, because the write replication happens
+async.
+
+So the order of operations
+1. PutItem is called by the client with a given partition key
+2. The partition key is found to map to partition X
+3. Write data for item to partition X
+4. Copy write to a secondary node for partition X
+5. Respond to client that write succeeded
+6. Copy write to another node async
+
+![Dynamo replication](./images/dynamo_replication.png)
+
+The two types of consistency in Dynamo are 
+* Strong consistency
+  * Any read will reflect all writes that happened beforehand
+  * Consumes more read capacity
+* Eventual consistency
+  * Reads may be slightly outdated
+  * Consumes less read capacity
+
+Dynamo defaults to eventual consistency. Can opt into strong consistency via an
+API parameter when performing your read.
+
+Should consider your needs when choosing your indexes as well. A local secondary
+index allows for strongly-consistent reads, just like the underlying table. A
+global secondary index allows only eventually-consistent reads.
+
+### DynamoDB limits
+A single item is limited to 400 KB of data (vs 16 MB in MongoDB, 2GB in Cassandra).
+The size limit is intentional to push the user towards proper data modeling. The 
+larger your item size, the slower your read. You should break down larger items into 
+smaller items and do more targeted operations.
+
+This limit will affect you most commonly as you denormalize your data. When you 
+have a one-to-many relationship, you may be tempted to store all the related items 
+on the parent item rather than splitting this out. This works for many situations 
+but can blow up if you have an unbounded number of related items.
+
+The maximum result set size for the Query and Scan operations is 1 MB of data. This 
+is before any filter expressions are considered. If you have a need for more than 1 MB,
+then you should paginate.
+
+This 1MB limit is crucial to keeping DynamoDB’s promise of consistent single-digit 
+response times.
+
+A single partition can have a maximum of 3000 Read Capacity Units or 1000 Write 
+Capacity Units. Remember, capacity units are on a per-second basis, and these 
+limits apply to a single partition, not the table as a whole. Thus, you will need 
+to be doing 3000 reads per second for a given partition key to hit these limits.
+This is pretty high traffic volume, and not many users will hit it, though it’s 
+definitely possible. If this is something your application could hit, you’ll need 
+to look into read or write sharding your data.
+
+The last limit you should know about involves local secondary
+indexes and item collections. An item collection refers to all items
+with a given partition key, both in your main table and any local
+secondary indexes. If you have a local secondary index, a single
+item collection cannot be larger than 10GB. If you have a data
+model that has many items with the same partition key, this could
+bite you at a bad time because your writes will suddenly get rejected
+once you run out of partition space.
+
+The partition size limit is not a problem for global secondary indexes. If the items in a global secondary index for a partition key
+exceed 10 GB in total storage, they will be split across different
+partitions under the hood. This will happen transparently to you—
+one of the significant benefits of a fully-managed database.
+
+Multiple entities are stored in a DynamoDB base. In order to do that, you need to
+overload your keys, which means using generic names for your primary keys and
+using different values depending on the type of item (ex. ORG#123, USER#123).
+
 ### Interacting with DynamoDB
+When interacting with a relational DB, you'll often do so using SQL. In DynamoDB,
+you usually do that using the AWS SDK, or a third party library in code. 
+
+There are basically three areas one can group the API actions into:
+* Item-based actions - when you're operating on specific items
+  * GetItem - used for reading a single item from a table
+  * PutItem - used for writing an item to a table. This can completely overwrite an 
+  existing item with the same key, if any
+  * UpdateItem - used for updating an item in a table. This can create a new item 
+  if it doesn't previously exist, or it can add, remove, or alter properties on an 
+  existing item.
+  * DeleteItem - used for deleting an item from a table.
+* Queries - operating on an item collection
+* Scans - operating on an entire table
+
+#### Item-based actions
+There are three rules around item-based actions:
+* The full primary key must be specified in your request
+* All actions to alter data—writes, updates, or deletes—must use an item-based
+action.
+* All item-based actions must be performed on your main table, not a secondary index.
+
+You can't make a write operation to DynamoDB that says, "Update the attribute X for 
+all items with a partition key of Y" (assuming a composite primary key). You would 
+need to specify the full key of each of the items you’d like to update.
+
+The above described single-item actions can be performed in batches and transactions.
+These allow for multiple operations in a single request. But in here, still, you need
+to specify the exact items on which to operate. The actions are split up in Dynamo, but
+save you from sending multiple requests.
+
+In a batch request, the actions can succeed and fail independently. So one write won't
+affect another in the batch.
+
+In a transactional request, it is all or nothing. If one fails, everything fails, causing
+a rollback.
+
+#### Query
+A Query action lets you retrieve multiple items with the same partition key. Especially
+useful when modeling and retrieving data that includes relations. We can add a condition
+on the sort key.
+
+#### Scan
+A Scan can take a long time to run. It'll take everything. If you have a large table,
+you'll have to paginate. You can consider using it if:
+* You have a very small table
+* You're exporting all data from your table to a different sytem
+* In exceptional situations, where you have specifically modeled a sparse secondary 
+index in a way that expects a scan. 
+
 #### AWS Management Console
 This is the GUI for managing your data.
 #### AWS CLI
@@ -482,3 +727,48 @@ When we're writing, we'd choose one ID at random. When we're reading data back, 
 we use shard aggregation. Since we know the range of sub IDs, then we can use a 
 batch GET item and pass all the sub IDs.
 ![Hot popular datasets](./images/hot_popular_datasets.png)
+
+
+## DynamoDB Design Patterns
+
+Since DynamoDB has no concept of a foreign key, then there is no enforcement from
+Dynamo's side to it. We must maintain a correct relationship programmatically.
+
+### One-to-One
+We implement it using simple keys on both entities.
+
+#### Within a table
+To achieve this within a table, then we use a global secondary index with that 
+alternate partition key.
+
+#### Between tables
+To achieve this between tables, we can have primary keys denote the same values
+in both the tables. Or we can create global secondary indexes again.
+
+### One-to-Many
+We implement it using a simple key on one entity and a composite key on the other. Or
+by using set types.
+
+Composite keys should be used for large item sizes, and if querying multiple items
+within a partition key is required.
+
+Set types should be used for small item sizes, and if querying individual item attributes
+in Sets is not needed.
+
+#### Within a table
+
+
+#### Between tables
+
+
+### Many-to-Many
+We implement it using composite keys or indexes on both entities.
+
+### Hierarchical Data Structures
+These can be modeled as table items or JSON documents.
+
+#### Table items
+
+#### JSON documents
+Here you'd save the related data as a full JSON inside an attribute. E.g. metadata.
+![JSON Document](./images/json_document.png)
