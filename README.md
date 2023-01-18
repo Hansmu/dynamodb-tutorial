@@ -586,6 +586,14 @@ affect another in the batch.
 In a transactional request, it is all or nothing. If one fails, everything fails, causing
 a rollback.
 
+DynamoDB sets its limits to disallow writing queries that do not scale. You need a
+partition key as that allows for a O(1) lookup. No matter how large your table 
+becomes, including a partition key makes it a constant time operation. With a 
+Query you can do >=, <=, begins_with(), between, but not contains(), ends_with().
+This is because an item collection is ordered and stored as a B-tree. The time 
+complexity of a B-tree search is O(log n). Dynamo limits the data size so that you
+wouldn't be querying too much at one time, thus keeping speed. 
+
 #### Query
 A Query action lets you retrieve multiple items with the same partition key. Especially
 useful when modeling and retrieving data that includes relations. We can add a condition
