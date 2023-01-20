@@ -607,6 +607,58 @@ you'll have to paginate. You can consider using it if:
 * In exceptional situations, where you have specifically modeled a sparse secondary 
 index in a way that expects a scan. 
 
+#### Query structure
+````ts
+items = client.query(
+  TableName='MoviesAndActors',
+  KeyConditionExpression='#actor = :actor AND #movie BETWEEN :a AND :m',
+  ExpressionAttributeNames={
+    '#actor': 'Actor',
+    '#movie': 'Movie'
+  },
+  ExpressionAttributeValues={
+    ':actor': { 'S': 'Tom Hanks' },
+    ':a': { 'S': 'A' },
+    ':m': { 'S': 'M' }
+  }
+)
+````
+
+Expression attribute values - they start with a colon (:). They are substituted into the
+KeyConditionExpression. This kind of structure simplifies parsing and validation the 
+expression, as typing is separated from the expression.
+
+Expression attribute names - start with a bars character (#). Specify the names of
+the attributes you are evaluating in your request. You are not required to use this,
+but they come in handy when you might have a clash with reserved keywords. Also, when 
+you have a name with a period, as that would be interpreted as accessing a nested object.
+
+Don't use an ODM (ORM equivalent). Fetching isn't straight-forward in Dynamo. It depends
+heavily on your primary key design. Could use a helper library to translate the data
+to objects, though, just not for queries.
+
+You can provide additional optional properties to DynamoDB queries:
+* ConsistentRead - set it to true to get a strongly-consistent read. It's available 
+for GetItem, BatchGetItem, Query, Scan. Can only use on local secondary indexes, as
+all global ones are eventually consistent.
+* ScanIndexForward - controls which direction you are reading the results from the
+sort key. Available on Query. Setting it to false reads it in descending order.
+* ReturnValues - when performing a modification action, then you could get some
+attributes back using this. Usable on PutItem, UpdateItem, DeleteItem, TransactWriteItem.
+By default, Dynamo will not return any info for these operations. There are a couple
+of options for this property:
+  * NONE - return no attributes. The default.
+  * ALL_OLD - return all attributes as they were BEFORE the operation was applied.
+  * UPDATED_OLD - any attributes that were updated, return them as they were BEFORE the operation.
+  * ALL_NEW - return all as they are AFTER the operation.
+  * UPDATED_NEW - any attributes AFTER the operation.
+* ReturnConsumedCapacity - returns info on the capacity units used. Can use it when
+designing your table, for example, to see what access patterns consume how much. Could
+also pass the info onward to the customers that are billed based on the units.
+* ReturnItemCollectionMetrics - item collections cannot be larger than 10 GB for a 
+local secondary index. You can use this property to give advanced warnings.
+
+
 #### AWS Management Console
 This is the GUI for managing your data.
 #### AWS CLI
