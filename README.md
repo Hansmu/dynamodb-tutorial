@@ -683,7 +683,137 @@ Scan scans through the whole table looking for elements matching the criteria.
 Query usually returns the results within a 100ms, whereas scan might even take a few
 hours to find the relevant data.
 
+#### Expressions
+There are five types of expressions in DynamoDB:
+* **Key condition expressions** - used in Query API calls to describe which items you 
+want to retrieve in your query. Can only be used on elements of the primary key.
+You can use simple comparisons in your sort key conditions, such as greater than (>), 
+less than (<), or equal to (=). `KeyConditionExpression="#c = :c AND #ot BETWEEN 
+:start and :end"`. While you can use greater than, less than, equal to, or 
+begins_with, every condition on the sort key can be expressed with the BETWEEN 
+operator. Key expressions are critical when fetching multiple, heterogeneous
+items in a single request. With the right combination of item collection design and 
+proper key expressions, you can essentially 'join' your data just like a relational 
+database but without the performance impact of joins.
+* **Filter expressions** - used in Query and Scan operations to describe which items
+should be returned to the client after finding items that match your key condition
+expression. The key difference with a filter expression vs. a key condition
+expression is that a filter expression can be applied on any attribute in the table,
+not just those in the primary key. `FilterExpression="#genre = :genre"`. The major
+drawback of this expression is that filtering is applied after querying all
+the items necessary. Filter expressions can save you a bit of data sent over the 
+wire, but it won’t help you find data more quickly. It's also worth considering if
+you have a TTL field in your DB, then Amazon can take up to 48 hours to remove those
+entries, so it'd be safer to include that condition in your queries as well. Overall,
+don't rely on these too heavily.
+  ![Filter order](./images/filter_order.png)
+* **Projection expressions** - used in all read operations to describe which attributes
+you want to return on items that were read.  A projection expression is similar to a
+filter expression in that its main utility is in reducing the amount of data sent 
+over the wire in your response. While a filter expression works on an item-by-item 
+basis, the projection expression works on an attribute-by-attribute basis within an 
+item. `ProjectionExpression: "#actor, #movie, #role, #year, #genre"`. A projection 
+expression is used to specify exactly the attributes you want to receive from the 
+DynamoDB server. The projection expression can also be used to access nested
+properties, such as in a list or map attribute. Projection expressions are subject to 
+the same caveats as filter expressions—they are evaluated after the items are read 
+from the table and the 1MB limit is reached. Thus, if you are looking to 
+fetch a large number of items but each of them has a large attribute, you may find 
+yourself paginating more than you’d like. If this is the case, you may need to 
+create a secondary index with a custom projection that only copies certain 
+attributes into the index. This will allow you to quickly query multiple items 
+without having to paginate due to large, unneeded attributes.
+* **Condition expressions** - used in write operations to assert the existing condition
+(or non-condition) of an item before writing to it. Condition expressions are available 
+on every operation where you will alter an item—PutItem, UpdateItem, DeleteItem, and 
+their batch and transactional equivalents. They allow you to assert specific 
+statements about the status of the item before performing the write operation. If 
+the condition expression evaluates to false, the operation will be canceled. 
+Condition expressions can operate on any attribute on your item, not just those in 
+the primary key. This is because condition expressions are used with item-based 
+actions where the item in question has already been identified by passing the key 
+in a different parameter. Some reasons that you might want to use it are: do not 
+overwrite using PutItem, prevent an UpdateItem from creating an invalid state, 
+do not delete if the user is not the owner of an item. Without this property, 
+you'd have to query before to check the conditions, and you would need to 
+handle race conditions. In addition to the comparison operators, it has other 
+functions that could be used:
+  * attribute_exists() - check that an attribute exists
+  * attribute_not_exists() - check that an attribute does not exist. 
+  `ConditionExpression: "attribute_not_exists(#username)",`
+  * attribute_type() - check an attribute's type
+  * begins_with() - value begins with a substring
+  * contains() - a string contains a substring
+  * size() - check an attribute's size. For a string it's the length, binary is the number
+  of bytes. For Lists, maps, sets it returns the number of elements in a set.
+  `ConditionExpression: "size(#inprogress) <= 10",`
+* **Update expressions** - used in the UpdateItem call to describe the desired updates
+to an existing item. When using the UpdateItem API, you will only alter the 
+properties you specify. If the item already exists in the table, the attributes 
+that you don’t specify will remain the same as before the update operation. In an 
+update expression, you need to state the changes you want to make. There are four 
+verbs for stating these changes (`UpdateExpression="SET Name = :name, UpdatedAt = :updatedAt REMOVE InProgress"`):
+  * SET: Used for adding or overwriting an attribute on an item. Can also be used 
+  to add or subtract from a number attribute
+  * REMOVE: Used for deleting an attribute from an item or deleting nested 
+  properties from a list or map
+  * ADD: Used for adding to a number attribute or inserting an element into a set 
+  attribute
+  * DELETE: Used for removing an element from a set attribute
 
+
+Key condition expressions, filter expressions, and projection expressions are used
+for read operations.
+
+Condition expressions is for all write-based operations.
+
+Update expressions is for update operations only.
+
+All expressions may use the expression attribute names 
+(`ExpressionAttributeNames={
+  "#a": "Actor"
+}`) and all expressions other
+than the projection expression must use expression attribute values 
+(`ExpressionAttributeValues={
+  ":a": { "S": "Natalie Portman" }
+}`).
+
+Condition expressions can be used for checks across multiple items. If you want to
+perform an action on a certain entity, but you do not have all the data needed
+to decide whether to perform that action on the entity, then you can bind multiple
+items together in a transaction and if a previous action fails, then the entire
+thing fails. The TransactWriteItem API allows you to use up to 10 items in a 
+single request. The below example first checks that the user is an admin account.
+If so, then perform a delete.
+```js
+result = dynamodb.transact_write_items(
+  TransactItems=[
+    {
+      "ConditionCheck": {
+        "Key": {
+          "PK": { "S": "Admins#<orgId>" }
+        },
+        "TableName": "SaasApp",
+        ConditionExpression: "contains(#a, :user)",
+        ExpressionAttributeNames={
+            "#a": "Admins"
+        },
+        ExpressionAttributeValues={
+            ":user": { "S": <username> }
+        }
+      }
+    },
+    {
+      "Delete": {
+        "Key": {
+            "PK": { "S": "Billing#<orgId>" }
+        },
+        "TableName": "SaasApp"
+      }
+    }
+  ]
+}
+```
 ## DynamoDB Architecture
 DynamoDB utilizes a service oriented architecture. This means that software components,
 which are called services, are provided to other services through a communication
