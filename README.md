@@ -965,6 +965,51 @@ just like you overload your primary key. Use generic attribute names like
 `GSI1PK` and `GSI1SK` for your secondary indexes and handle multiple access 
 patterns within a single secondary index.
 
+## Single table design 
+In Dynamo, you should use as few tables as possible. Preferably one.
+
+With multiple tables, you'd have to join by doing multiple network requests. This
+would have to happen in a waterfall manner, thus you have to wait on each request, take
+the data from a previous one and feed it into the next. As you scale, it becomes
+slower and slower.
+
+You can pre-join your data in Dynamo to avoid multiple requests. An item collection
+in DynamoDB refers to all the items in a table or index that share a partition key.
+
+A single table also saves on operational overhead as you don't need alarms for multiple
+tables, just the one. Additionally, there's cost savings.
+
+There are 3 main downsides to single-table design in Dynamo:
+* The steep learning curve to understand single-table design.
+* The inflexibility of adding new access patterns - If your access patterns change 
+because you’re adding new objects or accessing multiple objects in different ways, 
+you may need to do an ETL process to scan every item in your table and update with 
+new attributes. This process isn’t impossible, but it does add friction to your
+development process. However, migrations aren’t to be feared.
+* The difficulty of exporting your tables for analytics - DynamoDB is designed for 
+on-line transactional processing (OLTP). But users also have a need for on-line 
+analytics processing (OLAP). DynamoDB is not good at OLAP queries. DynamoDB 
+focuses on being ultra-performant at OLTP queries and wants you to use other, 
+purpose-built databases for OLAP. To do this, you’ll need to get your data from 
+DynamoDB into another system. A well-optimized single-table DynamoDB layout looks 
+more like machine code than a simple spreadsheet
+
+When not to use a single-table design? Whenever I need query flexibility and/or 
+easier analytics more than I need blazing fast performance. There are two main
+occasions where this is needed:
+* in new applications where developer agility is more important than application 
+performance;
+* in applications using GraphQL.
+
+If you’re making a greenfield application at a startup, it’s unlikely you 
+absolutely require the scaling capabilities of DynamoDB to start, and you may not 
+know how your application will evolve over time.
+
+If your application is fine with 100ms response times, the increased flexibility 
+and easier analytics for early-stage use cases might be worth the slower 
+performance.
+
+
 ## DynamoDB Architecture
 DynamoDB utilizes a service oriented architecture. This means that software components,
 which are called services, are provided to other services through a communication
