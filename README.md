@@ -1009,6 +1009,43 @@ If your application is fine with 100ms response times, the increased flexibility
 and easier analytics for early-stage use cases might be worth the slower 
 performance.
 
+## Implementing the model
+90% of the work of using DynamoDB happens in the planning stage, before you write a
+single line of code.
+
+When writing the code, then certain guidelines should be followed.
+
+Separate application attributes from your indexing attributes. Even if an attribute's
+value is encoded in the indexing attribute already, then don't remove that attribute
+from the entity. E.g. username is used in the PK, and also in an attribute called 
+username. Duplicate it rather than relying on the PK.
+
+Implement your data model at the very boundary of your application. DynamoDB objects
+have type encodings that makes it difficult to work with those objects in the 
+business logic code. Transform the Dynamo objects to regular objects at the edge 
+of your app.
+
+Don't reuse attributes across multiple indexes. You may have values that happen to
+be the same for a global secondary index SK and the primary key SK. Do not reuse
+these. It will make data modeling more difficult. 
+For each global secondary index you use, give it a generic name of 
+GSI<Number>. Then, use GSI<Number>PK and GSI<Number>SK for your attribute types.
+
+Add a 'Type' attribute to every item. This attribute will be a simple string 
+declaring the type of entity: User, Order, SensorReading, etc. This can simplify
+migrations. E.g. when you need you add extra properties to an entity, then you can
+simply filter on that property. It also makes it easier to identity the entity type
+when you're browsing the DB entries. Additionally, it can help when you're transforming
+data for analytics.
+
+Write scripts to help debug access patterns. Rather than use the DynamoDB console,
+write little scripts that can be used to debug your access patterns.
+
+Shorten attribute names to save storage. For the marginal application, the 
+additional attribute names won’t be a meaningful cost difference. However, if 
+you plan on storing billions and trillions of items in DynamoDB, this can make a 
+difference with storage.
+
 
 ## DynamoDB Architecture
 DynamoDB utilizes a service oriented architecture. This means that software components,
